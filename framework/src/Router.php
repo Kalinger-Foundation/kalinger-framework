@@ -74,51 +74,58 @@ class Router
 //        print_r($this->routes);
     }
 
-    protected function normalizeUri()
+    protected function normalizeUri(): void
     {
-        $uri = $_SERVER['REQUEST_URI'];
+        $uri    = $_SERVER['REQUEST_URI'] ?? '/';
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-        // Признак AJAX-запроса через заголовок
-        $isAjaxHeader = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
-            && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+        // 1) Не трогаем всё, что не GET (POST/PUT/PATCH/DELETE) — важнейшее
+        if ($method !== 'GET') {
+            return;
+        }
 
-        // Признак AJAX-запроса через URI
-        $isAjaxInUri = stripos($uri, 'ajax') !== false;
+        // 2) Не трогаем AJAX/API/программные вызовы
+        if ($this->isProgrammaticRequest($uri)) {
+            return;
+        }
 
-        // Признак API-запроса
         $parsedUrl = parse_url($uri);
-        $path = $parsedUrl['path'] ?? '/';
+        $path  = $parsedUrl['path'] ?? '/';
         $query = isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '';
-        $isApiRequest = stripos($path, '/api/') === 0;
 
         // Убираем множественные слэши
         $path = preg_replace('#/+#', '/', $path);
 
-        // Добавляем завершающий слэш, если нужно
+        // Добавляем завершающий слэш
         if ($path !== '/' && substr($path, -1) !== '/') {
             $path .= '/';
         }
 
-        // Собираем нормализованный URI
         $normalized = $path . $query;
 
-        // Если URI уже нормализован — выходим
         if ($uri === $normalized) {
-            return;
+            return; // уже нормализован
         }
 
-        // Определяем тип редиректа
-        $isSpecial = $isAjaxHeader || $isAjaxInUri || $isApiRequest;
-        $redirectCode = $isSpecial ? 308 : 301;
+        $protocol = $this->getProtocol();
+        $host     = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
-        // Редиректим
-        $protocol = $this->getProtocol(); // например, https://
-        $host = $_SERVER['HTTP_HOST'];
-        $location = $protocol . $host . $normalized;
-
-        header("Location: $location", true, $redirectCode);
+        // Для обычных страниц достаточно 301
+        header('Location: ' . $protocol . $host . $normalized, true, 301);
         exit;
+    }
+
+    private function isProgrammaticRequest(string $uri): bool
+    {
+        $isAjaxHeader = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+            && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+        $path = parse_url($uri, PHP_URL_PATH) ?? '/';
+
+        $isAjaxInUri  = stripos($path, '/ajax/') !== false;
+        $isApiRequest = stripos($path, '/api/') === 0;
+
+        return $isAjaxHeader || $isAjaxInUri || $isApiRequest;
     }
 
     public function add($route, $params)
