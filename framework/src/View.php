@@ -2,7 +2,7 @@
 
 namespace Kalinger;
 
-use Smarty;
+use Smarty\Smarty;
 use Retrinko\Ini\IniFile;
 use Kalinger\SmartyExtensions;
 
@@ -28,6 +28,20 @@ class View {
 
         // init Smarty
         $this->smarty = new Smarty();
+
+        // Smarty 4 requires explicit registration of PHP functions used as modifiers.
+        foreach ([
+            'htmlspecialchars', 'strtotime', 'json_encode', 'trim', 'strpos',
+            'round', 'strstr', 'strip_tags', 'mt_rand', 'html_entity_decode',
+            'count', 'print_r', 'array_merge', 'preg_match', 'rand', 'date',
+        ] as $modifier) {
+            $this->smarty->registerPlugin('modifier', $modifier, $modifier);
+        }
+        // Built-in extensions precede registered plugins in Smarty 5. Override date_format first.
+        $this->smarty->setExtensions(array_merge(
+            [new SmartyDateFormatExtension()],
+            $this->smarty->getExtensions()
+        ));
 
         // config Smarty
         $this->smarty->setTemplateDir(WWW . '/' . $this->config['templatePrefix']);
